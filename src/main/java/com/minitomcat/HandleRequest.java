@@ -1,9 +1,6 @@
 package com.minitomcat;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.Socket;
 
 public class HandleRequest {
@@ -28,5 +25,40 @@ public class HandleRequest {
         System.out.println("请求方法: " + method);
         System.out.println("请求路径: " + url);
         System.out.println("请求版本: " + version);
+
+        // ===== 路由逻辑 =====
+        String body;
+        int statusCode;
+
+        if ("/".equals(url)) {
+            statusCode = 200;
+            body = "<h1>Welcome to MiniTomcat Home Page</h1>";
+        } else if ("/hello".equals(url)) {
+            statusCode = 200;
+            body = "<h1>Hello, MiniTomcat!</h1>";
+        } else {
+            statusCode = 404;
+            body = "<h1>404 Not Found</h1>";
+        }
+
+        // ===== 构造响应 =====
+        String statusLine;
+        if (statusCode == 200) {
+            statusLine = "HTTP/1.1 200 OK\r\n";
+        } else {
+            statusLine = "HTTP/1.1 404 Not Found\r\n";
+        }
+
+        String response = statusLine +
+                "Content-Type: text/html; charset=UTF-8\r\n" +
+                "Content-Length: " + body.getBytes("UTF-8").length + "\r\n" +
+                "\r\n" +
+                body;
+
+        OutputStream outputStream = socket.getOutputStream();
+        outputStream.write(response.getBytes("UTF-8"));
+        outputStream.flush();
+
+        socket.close();
     }
 }
