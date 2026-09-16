@@ -2,9 +2,21 @@ package com.minitomcat;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 
 public class HandleRequest {
+
+    private static final Map<String, String> ROUTES = new HashMap<>();
+
+    static {
+        ROUTES.put("/", "<h1>Welcome to MiniTomcat Home Page</h1>");
+        ROUTES.put("/hello", "<h1>Hello, MiniTomcat!</h1>");
+        ROUTES.put("/time", "<h1>" + new java.util.Date() + "</h1>");
+    }
+
     public static void handleRequest(Socket socket) throws IOException {
+
         // 处理请求
         System.out.println("处理请求");
         BufferedReader reader = new BufferedReader(
@@ -27,27 +39,22 @@ public class HandleRequest {
         System.out.println("请求版本: " + version);
 
         // ===== 路由逻辑 =====
-        String body;
+        // 简单路由逻辑，根据请求路径返回不同的响应体
+        // 从路由表里查
+        String body = ROUTES.get(url);
         int statusCode;
 
-        if ("/".equals(url)) {
-            statusCode = 200;
-            body = "<h1>Welcome to MiniTomcat Home Page</h1>";
-        } else if ("/hello".equals(url)) {
-            statusCode = 200;
-            body = "<h1>Hello, MiniTomcat!</h1>";
-        } else {
+        if (body == null) {
             statusCode = 404;
             body = "<h1>404 Not Found</h1>";
+        } else {
+            statusCode = 200;
         }
 
-        // ===== 构造响应 =====
-        String statusLine;
-        if (statusCode == 200) {
-            statusLine = "HTTP/1.1 200 OK\r\n";
-        } else {
-            statusLine = "HTTP/1.1 404 Not Found\r\n";
-        }
+        // 构造响应
+        String statusLine = (statusCode == 200)
+                ? "HTTP/1.1 200 OK\r\n"
+                : "HTTP/1.1 404 Not Found\r\n";
 
         String response = statusLine +
                 "Content-Type: text/html; charset=UTF-8\r\n" +
