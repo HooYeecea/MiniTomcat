@@ -2,17 +2,35 @@ package com.minitomcat;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class HandleRequest {
 
     private static final Map<String, Servlet> SERVLET_MAP = new HashMap<>();
+    private static final List<FilterMapping> FILTER_MAPPINGS = new ArrayList<>();
 
     static {
         SERVLET_MAP.put("/", (req, resp) -> resp.setBody("<h1>Welcome to MiniTomcat Home Page</h1>"));
         SERVLET_MAP.put("/hello", new HelloServlet());
         SERVLET_MAP.put("/time", new TimeServlet());
+
+        // 注册顺序就是执行顺序：先 Log，再 Timer，命中 /hello 时再走 HelloFilter
+        FILTER_MAPPINGS.add(new FilterMapping("/*", new LogFilter()));
+        FILTER_MAPPINGS.add(new FilterMapping("/*", new TimerFilter()));
+        FILTER_MAPPINGS.add(new FilterMapping("/hello", new HelloFilter()));
+    }
+
+    private static List<Filter> matchFilters(String url) {
+        List<Filter> matched = new ArrayList<>();
+        for (FilterMapping mapping : FILTER_MAPPINGS) {
+            if (mapping.matches(url)) {
+                matched.add(mapping.getFilter());
+            }
+        }
+        return matched;
     }
 
     public static void handleRequest(Socket socket){
@@ -53,15 +71,10 @@ public class HandleRequest {
             // 3. 创建 HttpResponse
             HttpResponse response = new HttpResponse(socket);
 
-            // 4. 从路由表找 Servlet
+            // 4. 匹配 Filter，组装 FilterChain，最后才落到 Servlet
             Servlet servlet = SERVLET_MAP.get(url);
-
-            if (servlet == null) {
-                response.setStatus(404);
-                response.setBody("<h1>404 Not Found</h1>");
-            } else {
-                servlet.service(request, response);
-            }
+            FilterChain chain = new ApplicationFilterChain(matchFilters(url), servlet);
+            chain.doFilter(request, response);
 
             // 5. 写回响应
             response.write();

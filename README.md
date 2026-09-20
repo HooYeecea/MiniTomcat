@@ -1,8 +1,8 @@
 # MiniTomcat
 
-一个手写的迷你 HTTP 服务器，用来理解 Tomcat 在处理请求时最核心的那几步：监听端口、解析 HTTP 报文、按路径分发到 Servlet、再把响应写回客户端。
+一个手写的迷你 HTTP 服务器，用来理解 Tomcat 在处理请求时最核心的那几步：监听端口、解析 HTTP 报文、按路径匹配 Filter、经 FilterChain 分发到 Servlet、再把响应写回客户端。
 
-它不是完整的 Servlet 容器，没有 `web.xml`、Session、Filter、JSP。目标是把「请求是怎么被接住、拆开、路由、响应」这条链路走通。
+它不是完整的 Servlet 容器，没有 `web.xml`、Session、JSP。目标是把「请求是怎么被接住、拆开、过滤、路由、响应」这条链路走通。
 
 ## 它能做什么
 
@@ -11,6 +11,7 @@
 - 解析请求行：`method`、`url`、`version`
 - 用一张路由表把 URL 映射到 `Servlet`
 - 支持自定义 Servlet，写法接近 Java Servlet 的 `service(req, resp)`
+- 支持 `Filter` / `FilterChain`：按 URL 模式匹配，递归调用 `chain.doFilter()`，链尾才执行 Servlet
 - 未匹配路径返回 `404 Not Found`
 
 ## 技术栈
@@ -30,8 +31,11 @@
 HttpServer          监听 8080，accept 后把 Socket 丢进线程池
     │
     ▼
-HandleRequest       读请求行 → 封装 HttpRequest → 查路由表
+HandleRequest       读请求行 → 封装 HttpRequest → 匹配 Filter → 查路由表
     │
+    ▼
+ApplicationFilterChain
+    ├─ Filter1.doFilter → Filter2.doFilter → ...
     ├─ 命中 Servlet  → servlet.service(req, resp)
     └─ 未命中        → 设置 404
     │
@@ -44,21 +48,30 @@ HttpResponse.write  拼 HTTP 响应头 + 正文，写回 Socket 并关闭连接
 1. `HttpServer` 阻塞在 `serverSocket.accept()`，有连接进来后提交给 10 线程的线程池。
 2. `HandleRequest` 从 Socket 输入流读出第一行，例如 `GET /hello HTTP/1.1`。
 3. 拆成方法、路径、协议版本，填进 `HttpRequest`。
-4. 用 URL 去 `SERVLET_MAP` 里找对应 Servlet。
-5. 找到就调用 `service()`；找不到就写 404 页面。
-6. `HttpResponse.write()` 按 HTTP/1.1 格式写出状态行、`Content-Type`、`Content-Length` 和 HTML 正文。
+4. 用 URL 去 `FILTER_MAPPINGS` 里找出所有匹配的 Filter，再去 `SERVLET_MAP` 里找 Servlet。
+5. 为这次请求新建一条 `ApplicationFilterChain`，从头调用 `chain.doFilter()`。
+6. 每个 Filter 可以在前后插入逻辑；不调用 `chain.doFilter()` 就会拦截，Servlet 不会执行。
+7. 链走到末尾：找到 Servlet 就调用 `service()`，找不到就写 404 页面。
+8. `HttpResponse.write()` 按 HTTP/1.1 格式写出状态行、`Content-Type`、`Content-Length` 和 HTML 正文。
 
 ## 核心类
 
 | 类 | 职责 |
 | --- | --- |
 | `HttpServer` | 入口。创建 `ServerSocket`、线程池，循环接受连接 |
-| `HandleRequest` | 解析请求、维护路由表、调度 Servlet |
+| `HandleRequest` | 解析请求、维护路由表和 Filter 映射、组装 FilterChain |
 | `HttpRequest` | 请求对象，目前只保存 method / url / version |
 | `HttpResponse` | 响应对象，设置状态码和正文，最后写回客户端 |
 | `Servlet` | 业务接口，只有一个 `service` 方法 |
+| `Filter` | 过滤器接口，`doFilter(req, resp, chain)` |
+| `FilterChain` | 过滤链接口，负责调用下一个 Filter / Servlet |
+| `ApplicationFilterChain` | FilterChain 实现，用 `pos` 记录当前走到第几个 Filter |
+| `FilterMapping` | Filter 与 URL 模式的绑定，支持 `/*`、`/xxx/*`、精确路径 |
 | `HelloServlet` | `/hello` 示例 |
 | `TimeServlet` | `/time` 示例，返回当前时间 |
+| `LogFilter` | 打印请求进入 / 离开，映射 `/*` |
+| `TimerFilter` | 统计整条链耗时，映射 `/*` |
+| `HelloFilter` | 只拦截 `/hello`，用来演示 URL 匹配 |
 
 路由注册在 `HandleRequest` 的静态块里：
 
@@ -66,6 +79,10 @@ HttpResponse.write  拼 HTTP 响应头 + 正文，写回 Socket 并关闭连接
 SERVLET_MAP.put("/", (req, resp) -> resp.setBody("<h1>Welcome to MiniTomcat Home Page</h1>"));
 SERVLET_MAP.put("/hello", new HelloServlet());
 SERVLET_MAP.put("/time", new TimeServlet());
+
+FILTER_MAPPINGS.add(new FilterMapping("/*", new LogFilter()));
+FILTER_MAPPINGS.add(new FilterMapping("/*", new TimerFilter()));
+FILTER_MAPPINGS.add(new FilterMapping("/hello", new HelloFilter()));
 ```
 
 ## 项目结构
@@ -79,8 +96,15 @@ MiniTomcat
     ├── HttpRequest.java
     ├── HttpResponse.java
     ├── Servlet.java
+    ├── Filter.java
+    ├── FilterChain.java
+    ├── ApplicationFilterChain.java
+    ├── FilterMapping.java
     ├── HelloServlet.java
-    └── TimeServlet.java
+    ├── TimeServlet.java
+    ├── LogFilter.java
+    ├── TimerFilter.java
+    └── HelloFilter.java
 ```
 
 ## 如何运行
@@ -144,13 +168,56 @@ SERVLET_MAP.put("/ping", new PingServlet());
 
 也可以直接用 lambda 注册，不必单独建类。
 
+## 如何加一个自己的 Filter
+
+1. 实现 `Filter` 接口。想继续往下走就必须调用 `chain.doFilter()`：
+
+```java
+public class AuthFilter implements Filter {
+    @Override
+    public void doFilter(HttpRequest request, HttpResponse response, FilterChain chain) throws IOException {
+        // 前置逻辑：鉴权、记日志、改请求……
+        chain.doFilter(request, response);
+        // 后置逻辑：统计耗时、改响应……
+    }
+}
+```
+
+如果这里不调用 `chain.doFilter()`，后面的 Filter 和 Servlet 都不会执行，相当于拦截。
+
+2. 在 `HandleRequest` 的静态块里按顺序注册 URL 模式：
+
+```java
+FILTER_MAPPINGS.add(new FilterMapping("/*", new AuthFilter()));
+```
+
+支持的 URL 模式：
+
+| 模式 | 含义 |
+| --- | --- |
+| `/*` | 匹配所有路径 |
+| `/hello` | 精确匹配 |
+| `/api/*` | 匹配 `/api` 以及 `/api/...` |
+| `*.do` | 按扩展名匹配 |
+
+3. 重启服务器。访问 `/hello` 时控制台大致会看到：
+
+```
+[LogFilter] 进入: GET /hello
+[HelloFilter] 命中 /hello，准备进入 HelloServlet
+[TimerFilter] /hello 耗时 1 ms
+[LogFilter] 离开: /hello
+```
+
+注册顺序就是执行顺序：先注册的 Filter 先进入、后离开（洋葱模型）。
+
 ## 和真实 Tomcat 差在哪
 
 当前版本刻意做小，下面这些都还没有：
 
 - 只解析请求行，不解析 Header、Query、Cookie、请求体
-- 没有 `web.xml` / 注解扫描，路由靠代码里手动 `put`
-- 没有 Session、Filter、Listener、JSP
+- 没有 `web.xml` / 注解扫描，路由和 Filter 靠代码里手动注册
+- 没有 Session、Listener、JSP，Filter 也没有 `init` / `destroy` / Request 包装
 - 没有静态资源目录，响应固定为 `text/html`
 - 连接处理完就关闭，没有 Keep-Alive
 - 状态码目前主要区分 200 和 404
