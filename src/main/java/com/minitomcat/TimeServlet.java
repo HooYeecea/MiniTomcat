@@ -1,8 +1,8 @@
 package com.minitomcat;
 
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
-import com.minispring.web.Servlet;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
+import com.web.Servlet;
 
 import java.util.Date;
 

@@ -1,6 +1,6 @@
 package com.minitomcat;
 
-import com.minispring.web.HttpResponse;
+import com.web.HttpResponse;
 
 import java.io.IOException;
 import java.io.OutputStream;

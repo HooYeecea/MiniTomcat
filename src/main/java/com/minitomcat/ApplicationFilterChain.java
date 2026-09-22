@@ -1,10 +1,10 @@
 package com.minitomcat;
 
-import com.minispring.web.Filter;
-import com.minispring.web.FilterChain;
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
-import com.minispring.web.Servlet;
+import com.web.Filter;
+import com.web.FilterChain;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
+import com.web.Servlet;
 
 import java.util.List;
 

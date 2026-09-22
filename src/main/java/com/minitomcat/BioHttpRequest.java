@@ -1,6 +1,6 @@
 package com.minitomcat;
 
-import com.minispring.web.HttpRequest;
+import com.web.HttpRequest;
 
 /**
  * BIO connector request. Only method / URI / version for now.

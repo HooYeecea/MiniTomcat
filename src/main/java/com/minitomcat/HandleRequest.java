@@ -1,8 +1,8 @@
 package com.minitomcat;
 
-import com.minispring.web.Filter;
-import com.minispring.web.FilterChain;
-import com.minispring.web.Servlet;
+import com.web.Filter;
+import com.web.FilterChain;
+import com.web.Servlet;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

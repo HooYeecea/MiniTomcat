@@ -1,6 +1,6 @@
 package com.minitomcat;
 
-import com.minispring.web.Filter;
+import com.web.Filter;
 
 /**
  * Filter 与 URL 模式的绑定，对应 Tomcat 里的 FilterMap。

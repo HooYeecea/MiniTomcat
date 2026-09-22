@@ -1,9 +1,9 @@
 package com.minitomcat;
 
-import com.minispring.web.Filter;
-import com.minispring.web.FilterChain;
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
+import com.web.Filter;
+import com.web.FilterChain;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
 
 /**
  * 演示 Filter 可以包住后续整条链：先计时，再放行，回来后打印耗时。

@@ -1,9 +1,9 @@
 package com.minitomcat;
 
-import com.minispring.web.Filter;
-import com.minispring.web.FilterChain;
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
+import com.web.Filter;
+import com.web.FilterChain;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
 
 /**
  * 演示 URL 匹配：只拦截 {@code /hello}，其他路径不会进这个 Filter。

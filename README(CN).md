@@ -14,11 +14,11 @@
 | 项 | 说明 |
 |----|------|
 | 模块 | `MiniServletApi`（`mini-servlet-api`） |
-| 包名 | `com.minispring.web` |
+| 包名 | `com.web` |
 | 仓库 | [https://github.com/HooYeecea/MiniServletAPI](https://github.com/HooYeecea/MiniServletAPI) |
 
 本工程**实现**该 API（`BioHttpRequest` / `BioHttpResponse`、过滤链、示例 Servlet/Filter）。
-写业务时请从 `com.minispring.web` 引入类型，而不是依赖某个容器私有包。
+写业务时请从 `com.web` 引入类型，而不是依赖某个容器私有包。
 
 NIO 兄弟项目：[MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
 
@@ -77,9 +77,9 @@ BioHttpResponse.write  拼 HTTP 响应头 + 正文，写回 Socket 并关闭连�
 | --- | --- |
 | `HttpServer` | 入口。创建 `ServerSocket`、线程池，循环接受连接 |
 | `HandleRequest` | 解析请求、维护路由表和 Filter 映射、组装 FilterChain |
-| `BioHttpRequest` | 具体请求对象，实现 `com.minispring.web.HttpRequest` |
-| `BioHttpResponse` | 具体响应对象，实现 `com.minispring.web.HttpResponse` |
-| `Servlet` / `Filter` / `FilterChain` | 来自 **mini-servlet-api**（`com.minispring.web`） |
+| `BioHttpRequest` | 具体请求对象，实现 `com.web.HttpRequest` |
+| `BioHttpResponse` | 具体响应对象，实现 `com.web.HttpResponse` |
+| `Servlet` / `Filter` / `FilterChain` | 来自 **mini-servlet-api**（`com.web`） |
 | `ApplicationFilterChain` | FilterChain 实现，用 `pos` 记录当前走到第几个 Filter |
 | `FilterMapping` | Filter 与 URL 模式的绑定，支持 `/*`、`/xxx/*`、精确路径、扩展名 |
 | `HelloServlet` | `/hello` 示例 |
@@ -162,12 +162,12 @@ curl http://localhost:8080/time
 
 ## 如何加一个自己的 Servlet
 
-1. 实现 `com.minispring.web.Servlet` 接口：
+1. 实现 `com.web.Servlet` 接口：
 
 ```java
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
-import com.minispring.web.Servlet;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
+import com.web.Servlet;
 
 public class PingServlet implements Servlet {
     @Override
@@ -189,10 +189,10 @@ SERVLET_MAP.put("/ping", new PingServlet());
 
 ## 如何加一个自己的 Filter
 
-1. 实现 `com.minispring.web.Filter` 接口。想继续往下走就必须调用 `chain.doFilter()`：
+1. 实现 `com.web.Filter` 接口。想继续往下走就必须调用 `chain.doFilter()`：
 
 ```java
-import com.minispring.web.*;
+import com.web.*;
 
 public class AuthFilter implements Filter {
     @Override

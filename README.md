@@ -17,11 +17,11 @@ separate module so BIO / NIO Tomcat and MiniMVC can share one contract:
 | Item | Value |
 |------|--------|
 | Module | `MiniServletApi` (`mini-servlet-api`) |
-| Package | `com.minispring.web` |
+| Package | `com.web` |
 | Repository | [https://github.com/HooYeecea/MiniServletAPI](https://github.com/HooYeecea/MiniServletAPI) |
 
 This project **implements** that API (`BioHttpRequest` / `BioHttpResponse`, filter chain, demos).
-Application code should import types from `com.minispring.web`, not from a container-specific package.
+Application code should import types from `com.web`, not from a container-specific package.
 
 Sibling NIO server: [MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
 
@@ -80,9 +80,9 @@ Typical steps for one request:
 |------|------|
 | `HttpServer` | Entry: `ServerSocket`, thread pool, accept loop |
 | `HandleRequest` | Parse request, route table, Filter mappings, build chain |
-| `BioHttpRequest` | Concrete request; implements `com.minispring.web.HttpRequest` |
-| `BioHttpResponse` | Concrete response; implements `com.minispring.web.HttpResponse` |
-| `Servlet` / `Filter` / `FilterChain` | From **mini-servlet-api** (`com.minispring.web`) |
+| `BioHttpRequest` | Concrete request; implements `com.web.HttpRequest` |
+| `BioHttpResponse` | Concrete response; implements `com.web.HttpResponse` |
+| `Servlet` / `Filter` / `FilterChain` | From **mini-servlet-api** (`com.web`) |
 | `ApplicationFilterChain` | FilterChain impl; tracks Filter position with `pos` |
 | `FilterMapping` | Filter ↔ URL pattern (`/*`, `/xxx/*`, exact, `*.ext`) |
 | `HelloServlet` / `TimeServlet` | Sample Servlets |
@@ -157,12 +157,12 @@ curl http://localhost:8080/time
 
 ## Add your own Servlet
 
-1. Implement `com.minispring.web.Servlet`:
+1. Implement `com.web.Servlet`:
 
 ```java
-import com.minispring.web.HttpRequest;
-import com.minispring.web.HttpResponse;
-import com.minispring.web.Servlet;
+import com.web.HttpRequest;
+import com.web.HttpResponse;
+import com.web.Servlet;
 
 public class PingServlet implements Servlet {
     @Override
@@ -184,10 +184,10 @@ Lambdas work too; a separate class is optional.
 
 ## Add your own Filter
 
-1. Implement `com.minispring.web.Filter`. Call `chain.doFilter()` to continue:
+1. Implement `com.web.Filter`. Call `chain.doFilter()` to continue:
 
 ```java
-import com.minispring.web.*;
+import com.web.*;
 
 public class AuthFilter implements Filter {
     @Override
