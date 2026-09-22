@@ -2,13 +2,20 @@ package com.minitomcat;
 
 import com.web.HttpRequest;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
- * BIO connector request. Only method / URI / version for now.
+ * BIO connector request: method / URI / version + query parameters.
  */
 public class BioHttpRequest implements HttpRequest {
     private String method;
     private String url;
     private String version;
+    private final Map<String, String> parameters = new LinkedHashMap<>();
 
     public BioHttpRequest() {
     }
@@ -29,6 +36,8 @@ public class BioHttpRequest implements HttpRequest {
 
     public void setUrl(String url) {
         this.url = url;
+        parameters.clear();
+        parseQueryString();
     }
 
     @Override
@@ -53,5 +62,42 @@ public class BioHttpRequest implements HttpRequest {
 
     public void setVersion(String version) {
         this.version = version;
+    }
+
+    @Override
+    public String getParameter(String name) {
+        return parameters.get(name);
+    }
+
+    @Override
+    public Map<String, String> getParameters() {
+        return Collections.unmodifiableMap(parameters);
+    }
+
+    private void parseQueryString() {
+        if (url == null) {
+            return;
+        }
+        int query = url.indexOf('?');
+        if (query < 0 || query == url.length() - 1) {
+            return;
+        }
+        for (String pair : url.substring(query + 1).split("&")) {
+            if (pair.isEmpty()) {
+                continue;
+            }
+            int eq = pair.indexOf('=');
+            String rawName = eq >= 0 ? pair.substring(0, eq) : pair;
+            String rawValue = eq >= 0 ? pair.substring(eq + 1) : "";
+            parameters.putIfAbsent(decode(rawName), decode(rawValue));
+        }
+    }
+
+    private static String decode(String value) {
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return value;
+        }
     }
 }

@@ -27,10 +27,48 @@ public class HandleRequest {
         FILTER_MAPPINGS.add(new FilterMapping("/hello", new HelloFilter()));
     }
 
-    private static List<Filter> matchFilters(String url) {
+    /** Clear built-in demo routes (used by MiniMVC bootstrap). */
+    public static void resetMappings() {
+        SERVLET_MAP.clear();
+        FILTER_MAPPINGS.clear();
+    }
+
+    /** Register a servlet. Use {@code /*} as the front-controller fallback. */
+    public static void registerServlet(String path, Servlet servlet) {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException("path must not be empty");
+        }
+        if (servlet == null) {
+            throw new IllegalArgumentException("servlet must not be null");
+        }
+        SERVLET_MAP.put(path, servlet);
+    }
+
+    public static void registerFilter(String urlPattern, Filter filter) {
+        FILTER_MAPPINGS.add(new FilterMapping(urlPattern, filter));
+    }
+
+    private static String pathOnly(String url) {
+        if (url == null || url.isEmpty()) {
+            return "/";
+        }
+        int query = url.indexOf('?');
+        String path = query >= 0 ? url.substring(0, query) : url;
+        return path.isEmpty() ? "/" : path;
+    }
+
+    private static Servlet findServlet(String path) {
+        Servlet exact = SERVLET_MAP.get(path);
+        if (exact != null) {
+            return exact;
+        }
+        return SERVLET_MAP.get("/*");
+    }
+
+    private static List<Filter> matchFilters(String path) {
         List<Filter> matched = new ArrayList<>();
         for (FilterMapping mapping : FILTER_MAPPINGS) {
-            if (mapping.matches(url)) {
+            if (mapping.matches(path)) {
                 matched.add(mapping.getFilter());
             }
         }
@@ -60,6 +98,8 @@ public class HandleRequest {
             System.out.println("请求路径: " + url);
             System.out.println("请求版本: " + version);
 
+            String path = pathOnly(url);
+
             BioHttpRequest request = new BioHttpRequest();
             request.setMethod(method);
             request.setUrl(url);
@@ -67,8 +107,8 @@ public class HandleRequest {
 
             BioHttpResponse response = new BioHttpResponse(socket);
 
-            Servlet servlet = SERVLET_MAP.get(url);
-            FilterChain chain = new ApplicationFilterChain(matchFilters(url), servlet);
+            Servlet servlet = findServlet(path);
+            FilterChain chain = new ApplicationFilterChain(matchFilters(path), servlet);
             chain.doFilter(request, response);
 
             response.write();
