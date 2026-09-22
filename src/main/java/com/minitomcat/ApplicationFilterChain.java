@@ -1,6 +1,11 @@
 package com.minitomcat;
 
-import java.io.IOException;
+import com.minispring.web.Filter;
+import com.minispring.web.FilterChain;
+import com.minispring.web.HttpRequest;
+import com.minispring.web.HttpResponse;
+import com.minispring.web.Servlet;
+
 import java.util.List;
 
 /**
@@ -17,15 +22,13 @@ public class ApplicationFilterChain implements FilterChain {
         this.servlet = servlet;
     }
 
-    // 递归调用 Filter.doFilter 方法，直到走到最后一个 Filter 或 Servlet。
     @Override
-    public void doFilter(HttpRequest request, HttpResponse response) throws IOException {
+    public void doFilter(HttpRequest request, HttpResponse response) throws Exception {
         if (pos < filters.size()) {
             Filter next = filters.get(pos++);
             next.doFilter(request, response, this);
             return;
         }
-        // 走到最后一个 Filter，调用 Servlet.service 方法。
         if (servlet != null) {
             servlet.service(request, response);
         } else {

@@ -1,5 +1,9 @@
 package com.minitomcat;
 
+import com.minispring.web.HttpRequest;
+import com.minispring.web.HttpResponse;
+import com.minispring.web.Servlet;
+
 import java.util.Date;
 
 public class TimeServlet implements Servlet {
