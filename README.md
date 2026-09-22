@@ -1,79 +1,94 @@
 # MiniTomcat
 
-一个手写的迷你 HTTP 服务器，用来理解 Tomcat 在处理请求时最核心的那几步：监听端口、解析 HTTP 报文、按路径匹配 Filter、经 FilterChain 分发到 Servlet、再把响应写回客户端。
+A hand-written mini HTTP server for learning the core Tomcat request path:
+listen on a port, parse an HTTP request line, match Filters by URL, dispatch through
+`FilterChain` to a `Servlet`, then write the response back to the client.
 
-它不是完整的 Servlet 容器，没有 `web.xml`、Session、JSP。目标是把「请求是怎么被接住、拆开、过滤、路由、响应」这条链路走通。
+It is **not** a full Servlet container — no `web.xml`, Session, or JSP.
+The goal is to walk the path: accept → parse → filter → route → respond.
 
-## 它能做什么
+Chinese version: [README(CN).md](README(CN).md)
 
-- 监听 `8080` 端口，接收浏览器或 `curl` 发来的 HTTP 请求
-- 用固定大小线程池并发处理连接，主线程只负责 `accept`
-- 解析请求行：`method`、`url`、`version`
-- 用一张路由表把 URL 映射到 `Servlet`
-- 支持自定义 Servlet，写法接近 Java Servlet 的 `service(req, resp)`
-- 支持 `Filter` / `FilterChain`：按 URL 模式匹配，递归调用 `chain.doFilter()`，链尾才执行 Servlet
-- 未匹配路径返回 `404 Not Found`
+## Shared Servlet API
 
-## 技术栈
+`Servlet`, `Filter`, `FilterChain`, `HttpRequest`, and `HttpResponse` live in a
+separate module so BIO / NIO Tomcat and MiniMVC can share one contract:
+
+| Item | Value |
+|------|--------|
+| Module | `MiniServletApi` (`mini-servlet-api`) |
+| Package | `com.minispring.web` |
+| Repository | [https://github.com/HooYeecea/MiniServletAPI](https://github.com/HooYeecea/MiniServletAPI) |
+
+This project **implements** that API (`BioHttpRequest` / `BioHttpResponse`, filter chain, demos).
+Application code should import types from `com.minispring.web`, not from a container-specific package.
+
+Sibling NIO server: [MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
+
+## What it can do
+
+- Listen on port `8080` for browser / `curl` requests
+- Fixed-size thread pool; the main thread only `accept`s
+- Parse the request line: `method`, `url`, `version`
+- Route URLs to a `Servlet` via a simple map
+- Custom Servlets with a `service(req, resp)` style API
+- `Filter` / `FilterChain` with URL patterns; call `chain.doFilter()` to continue
+- Unmatched paths return `404 Not Found`
+
+## Stack
 
 - Java 21
 - Maven
-- 标准库：`ServerSocket` / `Socket` / `ExecutorService`
+- JDK: `ServerSocket` / `Socket` / `ExecutorService`
+- Depends on **`mini-servlet-api`** (shared contracts)
 
-无第三方依赖。
-
-## 请求处理流程
+## Request flow
 
 ```
-浏览器 / curl
+Browser / curl
     │
     ▼
-HttpServer          监听 8080，accept 后把 Socket 丢进线程池
+HttpServer          listen 8080, accept → thread pool
     │
     ▼
-HandleRequest       读请求行 → 封装 HttpRequest → 匹配 Filter → 查路由表
+HandleRequest       parse line → BioHttpRequest → match Filters → route table
     │
     ▼
 ApplicationFilterChain
     ├─ Filter1.doFilter → Filter2.doFilter → ...
-    ├─ 命中 Servlet  → servlet.service(req, resp)
-    └─ 未命中        → 设置 404
+    ├─ hit Servlet  → servlet.service(req, resp)
+    └─ miss         → set 404
     │
     ▼
-HttpResponse.write  拼 HTTP 响应头 + 正文，写回 Socket 并关闭连接
+BioHttpResponse.write  build HTTP response, write socket, close
 ```
 
-一次请求的大致步骤：
+Typical steps for one request:
 
-1. `HttpServer` 阻塞在 `serverSocket.accept()`，有连接进来后提交给 10 线程的线程池。
-2. `HandleRequest` 从 Socket 输入流读出第一行，例如 `GET /hello HTTP/1.1`。
-3. 拆成方法、路径、协议版本，填进 `HttpRequest`。
-4. 用 URL 去 `FILTER_MAPPINGS` 里找出所有匹配的 Filter，再去 `SERVLET_MAP` 里找 Servlet。
-5. 为这次请求新建一条 `ApplicationFilterChain`，从头调用 `chain.doFilter()`。
-6. 每个 Filter 可以在前后插入逻辑；不调用 `chain.doFilter()` 就会拦截，Servlet 不会执行。
-7. 链走到末尾：找到 Servlet 就调用 `service()`，找不到就写 404 页面。
-8. `HttpResponse.write()` 按 HTTP/1.1 格式写出状态行、`Content-Type`、`Content-Length` 和 HTML 正文。
+1. `HttpServer` blocks on `serverSocket.accept()`, then submits work to a 10-thread pool.
+2. `HandleRequest` reads the first line, e.g. `GET /hello HTTP/1.1`.
+3. Fills `BioHttpRequest` with method / url / version.
+4. Matches Filters from `FILTER_MAPPINGS`, looks up Servlet in `SERVLET_MAP`.
+5. Builds an `ApplicationFilterChain` and starts `chain.doFilter()`.
+6. Each Filter may run before/after; skipping `chain.doFilter()` blocks the Servlet.
+7. At the end of the chain: call `service()`, or write a 404 body.
+8. `BioHttpResponse.write()` sends status, headers, and body.
 
-## 核心类
+## Core types
 
-| 类 | 职责 |
-| --- | --- |
-| `HttpServer` | 入口。创建 `ServerSocket`、线程池，循环接受连接 |
-| `HandleRequest` | 解析请求、维护路由表和 Filter 映射、组装 FilterChain |
-| `HttpRequest` | 请求对象，目前只保存 method / url / version |
-| `HttpResponse` | 响应对象，设置状态码和正文，最后写回客户端 |
-| `Servlet` | 业务接口，只有一个 `service` 方法 |
-| `Filter` | 过滤器接口，`doFilter(req, resp, chain)` |
-| `FilterChain` | 过滤链接口，负责调用下一个 Filter / Servlet |
-| `ApplicationFilterChain` | FilterChain 实现，用 `pos` 记录当前走到第几个 Filter |
-| `FilterMapping` | Filter 与 URL 模式的绑定，支持 `/*`、`/xxx/*`、精确路径 |
-| `HelloServlet` | `/hello` 示例 |
-| `TimeServlet` | `/time` 示例，返回当前时间 |
-| `LogFilter` | 打印请求进入 / 离开，映射 `/*` |
-| `TimerFilter` | 统计整条链耗时，映射 `/*` |
-| `HelloFilter` | 只拦截 `/hello`，用来演示 URL 匹配 |
+| Type | Role |
+|------|------|
+| `HttpServer` | Entry: `ServerSocket`, thread pool, accept loop |
+| `HandleRequest` | Parse request, route table, Filter mappings, build chain |
+| `BioHttpRequest` | Concrete request; implements `com.minispring.web.HttpRequest` |
+| `BioHttpResponse` | Concrete response; implements `com.minispring.web.HttpResponse` |
+| `Servlet` / `Filter` / `FilterChain` | From **mini-servlet-api** (`com.minispring.web`) |
+| `ApplicationFilterChain` | FilterChain impl; tracks Filter position with `pos` |
+| `FilterMapping` | Filter ↔ URL pattern (`/*`, `/xxx/*`, exact, `*.ext`) |
+| `HelloServlet` / `TimeServlet` | Sample Servlets |
+| `LogFilter` / `TimerFilter` / `HelloFilter` | Sample Filters |
 
-路由注册在 `HandleRequest` 的静态块里：
+Routes are registered in `HandleRequest`'s static block:
 
 ```java
 SERVLET_MAP.put("/", (req, resp) -> resp.setBody("<h1>Welcome to MiniTomcat Home Page</h1>"));
@@ -85,7 +100,7 @@ FILTER_MAPPINGS.add(new FilterMapping("/*", new TimerFilter()));
 FILTER_MAPPINGS.add(new FilterMapping("/hello", new HelloFilter()));
 ```
 
-## 项目结构
+## Project layout
 
 ```
 MiniTomcat
@@ -93,11 +108,8 @@ MiniTomcat
 └── src/main/java/com/minitomcat
     ├── HttpServer.java
     ├── HandleRequest.java
-    ├── HttpRequest.java
-    ├── HttpResponse.java
-    ├── Servlet.java
-    ├── Filter.java
-    ├── FilterChain.java
+    ├── BioHttpRequest.java
+    ├── BioHttpResponse.java
     ├── ApplicationFilterChain.java
     ├── FilterMapping.java
     ├── HelloServlet.java
@@ -107,49 +119,51 @@ MiniTomcat
     └── HelloFilter.java
 ```
 
-## 如何运行
+Shared API types are **not** in this tree; they come from [MiniServletAPI](https://github.com/HooYeecea/MiniServletAPI).
 
-需要本机已安装 **JDK 21** 和 **Maven**。
+## Build & run
+
+Requires **JDK 21** and **Maven**. Install `mini-servlet-api` first if you build this module alone
+(`mvn install` from that repo or from the parent `mini-spring` reactor).
 
 ```bash
-# 在项目根目录编译
 mvn compile
-
-# 启动服务器
 mvn exec:java -Dexec.mainClass="com.minitomcat.HttpServer"
 ```
 
-也可以在 IDE 里直接运行 `com.minitomcat.HttpServer` 的 `main` 方法。
+Or run `com.minitomcat.HttpServer#main` from an IDE.
 
-控制台出现下面这行就说明已经起来了：
+When you see:
 
 ```
 Server is running on port 8080
 ```
 
-## 内置路由
+the server is up.
 
-启动后访问：
+## Built-in routes
 
-| 路径 | 说明 |
-| --- | --- |
-| http://localhost:8080/ | 首页欢迎语 |
+| Path | Description |
+|------|-------------|
+| http://localhost:8080/ | Home welcome text |
 | http://localhost:8080/hello | `Hello, MiniTomcat!` |
-| http://localhost:8080/time | 服务器当前时间 |
-| 其他路径 | `404 Not Found` |
-
-用 curl 也可以：
+| http://localhost:8080/time | Server current time |
+| other paths | `404 Not Found` |
 
 ```bash
 curl http://localhost:8080/hello
 curl http://localhost:8080/time
 ```
 
-## 如何加一个自己的 Servlet
+## Add your own Servlet
 
-1. 实现 `Servlet` 接口：
+1. Implement `com.minispring.web.Servlet`:
 
 ```java
+import com.minispring.web.HttpRequest;
+import com.minispring.web.HttpResponse;
+import com.minispring.web.Servlet;
+
 public class PingServlet implements Servlet {
     @Override
     public void service(HttpRequest request, HttpResponse response) {
@@ -158,68 +172,61 @@ public class PingServlet implements Servlet {
 }
 ```
 
-2. 在 `HandleRequest` 的静态块里注册路径：
+2. Register in `HandleRequest`:
 
 ```java
 SERVLET_MAP.put("/ping", new PingServlet());
 ```
 
-3. 重启服务器，访问 `http://localhost:8080/ping`。
+3. Restart and open `http://localhost:8080/ping`.
 
-也可以直接用 lambda 注册，不必单独建类。
+Lambdas work too; a separate class is optional.
 
-## 如何加一个自己的 Filter
+## Add your own Filter
 
-1. 实现 `Filter` 接口。想继续往下走就必须调用 `chain.doFilter()`：
+1. Implement `com.minispring.web.Filter`. Call `chain.doFilter()` to continue:
 
 ```java
+import com.minispring.web.*;
+
 public class AuthFilter implements Filter {
     @Override
-    public void doFilter(HttpRequest request, HttpResponse response, FilterChain chain) throws IOException {
-        // 前置逻辑：鉴权、记日志、改请求……
+    public void doFilter(HttpRequest request, HttpResponse response, FilterChain chain) throws Exception {
+        // before: auth, logging, ...
         chain.doFilter(request, response);
-        // 后置逻辑：统计耗时、改响应……
+        // after: timing, tweak response, ...
     }
 }
 ```
 
-如果这里不调用 `chain.doFilter()`，后面的 Filter 和 Servlet 都不会执行，相当于拦截。
-
-2. 在 `HandleRequest` 的静态块里按顺序注册 URL 模式：
+2. Register URL patterns in order in `HandleRequest`:
 
 ```java
 FILTER_MAPPINGS.add(new FilterMapping("/*", new AuthFilter()));
 ```
 
-支持的 URL 模式：
+| Pattern | Meaning |
+|---------|---------|
+| `/*` | All paths |
+| `/hello` | Exact match |
+| `/api/*` | `/api` and `/api/...` |
+| `*.do` | Extension match |
 
-| 模式 | 含义 |
-| --- | --- |
-| `/*` | 匹配所有路径 |
-| `/hello` | 精确匹配 |
-| `/api/*` | 匹配 `/api` 以及 `/api/...` |
-| `*.do` | 按扩展名匹配 |
+Registration order is execution order (onion model).
 
-3. 重启服务器。访问 `/hello` 时控制台大致会看到：
+## Gaps vs real Tomcat
 
-```
-[LogFilter] 进入: GET /hello
-[HelloFilter] 命中 /hello，准备进入 HelloServlet
-[TimerFilter] /hello 耗时 1 ms
-[LogFilter] 离开: /hello
-```
+Intentionally small for now:
 
-注册顺序就是执行顺序：先注册的 Filter 先进入、后离开（洋葱模型）。
+- Request line only; no Header / Query / Cookie / body parsing
+- No `web.xml` / annotation scan; routes and Filters are registered in code
+- No Session, Listener, JSP
+- No static resource root; responses are primarily HTML text
+- Connection closed after each response (no Keep-Alive)
+- Status codes mainly distinguish 200 and 404
 
-## 和真实 Tomcat 差在哪
+Those gaps are natural next steps for practice.
 
-当前版本刻意做小，下面这些都还没有：
+## License
 
-- 只解析请求行，不解析 Header、Query、Cookie、请求体
-- 没有 `web.xml` / 注解扫描，路由和 Filter 靠代码里手动注册
-- 没有 Session、Listener、JSP，Filter 也没有 `init` / `destroy` / Request 包装
-- 没有静态资源目录，响应固定为 `text/html`
-- 连接处理完就关闭，没有 Keep-Alive
-- 状态码目前主要区分 200 和 404
-
-这些限制正好对应下一步可以动手扩展的方向。
+Personal practice project for learning Tomcat-style request handling.
