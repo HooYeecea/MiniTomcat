@@ -25,12 +25,15 @@ Application code should import types from `com.web`, not from a container-specif
 
 Sibling NIO server: [MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
 
+Also a module of the parent [MiniSpring](../README.md) reactor. MiniMVC registers
+`DispatcherServlet` via `HandleRequest.registerServlet(...)`.
+
 ## What it can do
 
 - Listen on port `8080` for browser / `curl` requests
 - Fixed-size thread pool; the main thread only `accept`s
-- Parse the request line: `method`, `url`, `version`
-- Route URLs to a `Servlet` via a simple map
+- Parse request line, headers, query string, and request body (`Content-Length`)
+- Route URLs to a `Servlet` via a simple map (`registerServlet` / `resetMappings`)
 - Custom Servlets with a `service(req, resp)` style API
 - `Filter` / `FilterChain` with URL patterns; call `chain.doFilter()` to continue
 - Unmatched paths return `404 Not Found`
@@ -51,7 +54,7 @@ Browser / curl
 HttpServer          listen 8080, accept → thread pool
     │
     ▼
-HandleRequest       parse line → BioHttpRequest → match Filters → route table
+HandleRequest       parse line/headers/body → BioHttpRequest → match Filters → route table
     │
     ▼
 ApplicationFilterChain
@@ -66,7 +69,7 @@ BioHttpResponse.write  build HTTP response, write socket, close
 Typical steps for one request:
 
 1. `HttpServer` blocks on `serverSocket.accept()`, then submits work to a 10-thread pool.
-2. `HandleRequest` reads the first line, e.g. `GET /hello HTTP/1.1`.
+2. `HandleRequest` reads the request line, headers, and optional body.
 3. Fills `BioHttpRequest` with method / url / version.
 4. Matches Filters from `FILTER_MAPPINGS`, looks up Servlet in `SERVLET_MAP`.
 5. Builds an `ApplicationFilterChain` and starts `chain.doFilter()`.
@@ -218,12 +221,12 @@ Registration order is execution order (onion model).
 
 Intentionally small for now:
 
-- Request line only; no Header / Query / Cookie / body parsing
+- Cookie parsing is minimal / incomplete vs real Servlet containers
 - No `web.xml` / annotation scan; routes and Filters are registered in code
 - No Session, Listener, JSP
 - No static resource root; responses are primarily HTML text
 - Connection closed after each response (no Keep-Alive)
-- Status codes mainly distinguish 200 and 404
+- Status codes are basic (200 / 404 / whatever apps set)
 
 Those gaps are natural next steps for practice.
 

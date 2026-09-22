@@ -22,12 +22,15 @@
 
 NIO 兄弟项目：[MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
 
+同时是父工程 [MiniSpring](../README(CN).md) 中的模块。MiniMVC 通过
+`HandleRequest.registerServlet(...)` 注册 `DispatcherServlet`。
+
 ## 它能做什么
 
 - 监听 `8080` 端口，接收浏览器或 `curl` 发来的 HTTP 请求
 - 用固定大小线程池并发处理连接，主线程只负责 `accept`
-- 解析请求行：`method`、`url`、`version`
-- 用一张路由表把 URL 映射到 `Servlet`
+- 解析请求行、Header、Query、以及按 `Content-Length` 读取请求体
+- 用一张路由表把 URL 映射到 `Servlet`（`registerServlet` / `resetMappings`）
 - 支持自定义 Servlet，写法接近 Java Servlet 的 `service(req, resp)`
 - 支持 `Filter` / `FilterChain`：按 URL 模式匹配，递归调用 `chain.doFilter()`，链尾才执行 Servlet
 - 未匹配路径返回 `404 Not Found`
@@ -48,7 +51,7 @@ NIO 兄弟项目：[MiniTomcatNIO](https://github.com/HooYeecea/MiniTomcatNIO)
 HttpServer          监听 8080，accept 后把 Socket 丢进线程池
     │
     ▼
-HandleRequest       读请求行 → 封装 BioHttpRequest → 匹配 Filter → 查路由表
+HandleRequest       读请求行/头/体 → 封装 BioHttpRequest → 匹配 Filter → 查路由表
     │
     ▼
 ApplicationFilterChain
@@ -63,7 +66,7 @@ BioHttpResponse.write  拼 HTTP 响应头 + 正文，写回 Socket 并关闭连�
 一次请求的大致步骤：
 
 1. `HttpServer` 阻塞在 `serverSocket.accept()`，有连接进来后提交给 10 线程的线程池。
-2. `HandleRequest` 从 Socket 输入流读出第一行，例如 `GET /hello HTTP/1.1`。
+2. `HandleRequest` 读取请求行、Header，以及可选的请求体。
 3. 拆成方法、路径、协议版本，填进 `BioHttpRequest`。
 4. 用 URL 去 `FILTER_MAPPINGS` 里找出所有匹配的 Filter，再去 `SERVLET_MAP` 里找 Servlet。
 5. 为这次请求新建一条 `ApplicationFilterChain`，从头调用 `chain.doFilter()`。
@@ -236,12 +239,12 @@ FILTER_MAPPINGS.add(new FilterMapping("/*", new AuthFilter()));
 
 当前版本刻意做小，下面这些都还没有：
 
-- 只解析请求行，不解析 Header、Query、Cookie、请求体
+- Cookie 解析相对真实容器仍不完整
 - 没有 `web.xml` / 注解扫描，路由和 Filter 靠代码里手动注册
 - 没有 Session、Listener、JSP
 - 没有静态资源目录，响应以 HTML 文本为主
 - 连接处理完就关闭，没有 Keep-Alive
-- 状态码目前主要区分 200 和 404
+- 状态码由应用自行设置，容器侧主要保证基本响应能力
 
 这些限制正好对应下一步可以动手扩展的方向。
 
