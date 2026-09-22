@@ -7,6 +7,7 @@ import com.web.Servlet;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,13 +28,11 @@ public class HandleRequest {
         FILTER_MAPPINGS.add(new FilterMapping("/hello", new HelloFilter()));
     }
 
-    /** Clear built-in demo routes (used by MiniMVC bootstrap). */
     public static void resetMappings() {
         SERVLET_MAP.clear();
         FILTER_MAPPINGS.clear();
     }
 
-    /** Register a servlet. Use {@code /*} as the front-controller fallback. */
     public static void registerServlet(String path, Servlet servlet) {
         if (path == null || path.isEmpty()) {
             throw new IllegalArgumentException("path must not be empty");
@@ -80,7 +79,7 @@ public class HandleRequest {
         try (socket) {
             System.out.println("处理请求");
             BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream())
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.ISO_8859_1)
             );
             String requestLine = reader.readLine();
             System.out.println("接收到请求，请求内容为:" + requestLine);
@@ -88,23 +87,46 @@ public class HandleRequest {
                 System.out.println("请求为空为空");
                 return;
             }
-            String address = socket.getInetAddress().toString();
-            System.out.println("请求地址: " + address);
             String[] parts = requestLine.split(" ");
             String method = parts[0];
             String url = parts[1];
             String version = parts[2];
-            System.out.println("请求方法: " + method);
-            System.out.println("请求路径: " + url);
-            System.out.println("请求版本: " + version);
-
-            String path = pathOnly(url);
 
             BioHttpRequest request = new BioHttpRequest();
             request.setMethod(method);
             request.setUrl(url);
             request.setVersion(version);
 
+            String headerLine;
+            while ((headerLine = reader.readLine()) != null && !headerLine.isEmpty()) {
+                int colon = headerLine.indexOf(':');
+                if (colon <= 0) {
+                    continue;
+                }
+                String name = headerLine.substring(0, colon).trim();
+                String value = headerLine.substring(colon + 1).trim();
+                request.setHeader(name, value);
+            }
+
+            int contentLength = 0;
+            String lengthHeader = request.getHeader("content-length");
+            if (lengthHeader != null && !lengthHeader.isEmpty()) {
+                contentLength = Integer.parseInt(lengthHeader);
+            }
+            if (contentLength > 0) {
+                char[] buf = new char[contentLength];
+                int offset = 0;
+                while (offset < contentLength) {
+                    int read = reader.read(buf, offset, contentLength - offset);
+                    if (read < 0) {
+                        break;
+                    }
+                    offset += read;
+                }
+                request.setBody(new String(buf, 0, offset).getBytes(StandardCharsets.UTF_8));
+            }
+
+            String path = pathOnly(url);
             BioHttpResponse response = new BioHttpResponse(socket);
 
             Servlet servlet = findServlet(path);

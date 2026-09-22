@@ -9,13 +9,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * BIO connector request: method / URI / version + query parameters.
+ * BIO connector request: method / URI / headers / query / body.
  */
 public class BioHttpRequest implements HttpRequest {
     private String method;
     private String url;
     private String version;
+    private final Map<String, String> headers = new LinkedHashMap<>();
     private final Map<String, String> parameters = new LinkedHashMap<>();
+    private byte[] body = new byte[0];
 
     public BioHttpRequest() {
     }
@@ -62,6 +64,40 @@ public class BioHttpRequest implements HttpRequest {
 
     public void setVersion(String version) {
         this.version = version;
+    }
+
+    public void setHeader(String name, String value) {
+        if (name == null) {
+            return;
+        }
+        headers.put(name.toLowerCase(), value);
+    }
+
+    @Override
+    public String getHeader(String name) {
+        if (name == null) {
+            return null;
+        }
+        return headers.get(name.toLowerCase());
+    }
+
+    @Override
+    public Map<String, String> getHeaders() {
+        return Collections.unmodifiableMap(headers);
+    }
+
+    public void setBody(byte[] body) {
+        this.body = body == null ? new byte[0] : body;
+    }
+
+    @Override
+    public byte[] getBody() {
+        return body;
+    }
+
+    @Override
+    public String getBodyAsString() {
+        return new String(body, StandardCharsets.UTF_8);
     }
 
     @Override
